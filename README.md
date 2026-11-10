@@ -64,3 +64,44 @@ Approval is a local workflow flag, not a legal verification. Keep the actual per
 SQLite database: `database/clippulse.db`
 
 The next milestone will add a reviewable episode shortlist and a transcript-based moment detector.
+
+
+## Resuming / refreshing existing sources
+
+If a feed times out, it is skipped and the run continues. To retry all saved feeds
+without repeating podcast-directory searches:
+
+```powershell
+python main.py --refresh-saved
+```
+
+Each feed has a bounded network timeout. Any episode records saved before an
+interruption remain in SQLite.
+## Milestone 2 - Episode Intelligence
+
+ClipPulse can now evaluate discovered podcast episodes using
+a heuristic relevance scoring system.
+
+### Rank episodes
+
+python main.py --rank-episodes
+
+### Display more candidates
+
+python main.py --rank-episodes --top 50
+
+### Filter by minimum score
+
+python main.py --rank-episodes --min-score 70
+
+### Ranking tiers
+
+- HIGH: 70-100
+- MEDIUM: 50-69
+- LOW: 0-49
+
+Episode scores are saved in SQLite and are not recalculated
+unless the ranking fields are reset.
+
+Scores estimate content relevance, not viral potential.
+Permission to republish must be verified separately.
