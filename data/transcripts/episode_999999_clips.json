@@ -1,0 +1,47 @@
+{
+    "episode_id": 999999,
+    "clips": [
+        {
+            "start": 180.0,
+            "end": 220.0,
+            "hook": "If I could give my younger self one piece of advice, it would be this: stop comparing your beginning to somebody else's tenth year.",
+            "title": "Stop Comparing Yourself to Others",
+            "reason": "Features a classic advice hook that hits an emotional chord with viewers, delivering a powerful lesson on comparison and focus with an inspiring conclusion.",
+            "scores": {
+                "hook": 9,
+                "emotion": 9,
+                "storytelling": 8,
+                "standalone": 10
+            },
+            "overall_score": 9.0
+        },
+        {
+            "start": 0.0,
+            "end": 50.0,
+            "hook": "Everyone thinks successful people have some incredible secret.",
+            "title": "The Truth About Consistency vs Intelligence",
+            "reason": "Starts with a strong counter-intuitive hook about success and transitions smoothly into a compelling story about a founder building a multi-million dollar company with just one hour of daily effort.",
+            "scores": {
+                "hook": 9,
+                "emotion": 8,
+                "storytelling": 9,
+                "standalone": 9
+            },
+            "overall_score": 8.75
+        },
+        {
+            "start": 150.0,
+            "end": 180.0,
+            "hook": "Imagine spending five years learning a skill, only to discover that a machine can perform it in seconds.",
+            "title": "Will AI Replace Your Career?",
+            "reason": "Opens with a terrifying and highly relevant hypothetical scenario about AI replacing human skills, followed by a reassuring historical perspective that leaves the viewer feeling optimistic.",
+            "scores": {
+                "hook": 10,
+                "emotion": 8,
+                "storytelling": 7,
+                "standalone": 9
+            },
+            "overall_score": 8.5
+        }
+    ]
+}

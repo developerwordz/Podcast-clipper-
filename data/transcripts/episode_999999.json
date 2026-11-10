@@ -1,0 +1,49 @@
+{
+    "episode_id": 999999,
+    "language": "en",
+    "language_probability": 0.99,
+    "duration_seconds": 220,
+    "full_text": "Everyone thinks successful people have some incredible secret. But after interviewing hundreds of founders, I discovered something surprising. Most of them are not exceptionally intelligent. They are just exceptionally consistent. There was one founder who told me he worked on his business for exactly one hour every single day. Even when nobody believed in him. Even when he made no money. Three years later, that company was worth millions. The biggest mistake young people make is waiting until they feel ready. You will never feel completely ready. You learn more from building something badly than from watching a hundred tutorials about building it perfectly. I once lost almost everything because I trusted the wrong business partner. At the time, I thought it was the end of my career. Looking back, that failure taught me more about choosing people than ten years of success ever could. Here is something nobody tells you about money. Your first goal should not be to look rich. It should be to own something that produces value even when you are sleeping. Looking successful and becoming financially independent are two very different things. AI is going to change almost every industry. But I don't think the biggest winners will be the people who know how to use the most AI tools. They will be the people who understand real problems and know how to solve them. Imagine spending five years learning a skill, only to discover that a machine can perform it in seconds. That sounds terrifying. But think about it differently. When calculators arrived, mathematicians did not disappear. The work changed, and new possibilities appeared. If I could give my younger self one piece of advice, it would be this: stop comparing your beginning to somebody else's tenth year. You see their results, but you do not see the thousands of ordinary days that created them. Focus on your next step. That is how you build something extraordinary.",
+    "segments": [
+        {
+            "start": 0,
+            "end": 25,
+            "text": "Everyone thinks successful people have some incredible secret. But after interviewing hundreds of founders, I discovered something surprising. Most of them are not exceptionally intelligent. They are just exceptionally consistent."
+        },
+        {
+            "start": 25,
+            "end": 50,
+            "text": "There was one founder who told me he worked on his business for exactly one hour every single day. Even when nobody believed in him. Even when he made no money. Three years later, that company was worth millions."
+        },
+        {
+            "start": 50,
+            "end": 75,
+            "text": "The biggest mistake young people make is waiting until they feel ready. You will never feel completely ready. You learn more from building something badly than from watching a hundred tutorials about building it perfectly."
+        },
+        {
+            "start": 75,
+            "end": 100,
+            "text": "I once lost almost everything because I trusted the wrong business partner. At the time, I thought it was the end of my career. Looking back, that failure taught me more about choosing people than ten years of success ever could."
+        },
+        {
+            "start": 100,
+            "end": 125,
+            "text": "Here is something nobody tells you about money. Your first goal should not be to look rich. It should be to own something that produces value even when you are sleeping. Looking successful and becoming financially independent are two very different things."
+        },
+        {
+            "start": 125,
+            "end": 150,
+            "text": "AI is going to change almost every industry. But I don't think the biggest winners will be the people who know how to use the most AI tools. They will be the people who understand real problems and know how to solve them."
+        },
+        {
+            "start": 150,
+            "end": 180,
+            "text": "Imagine spending five years learning a skill, only to discover that a machine can perform it in seconds. That sounds terrifying. But think about it differently. When calculators arrived, mathematicians did not disappear. The work changed, and new possibilities appeared."
+        },
+        {
+            "start": 180,
+            "end": 220,
+            "text": "If I could give my younger self one piece of advice, it would be this: stop comparing your beginning to somebody else's tenth year. You see their results, but you do not see the thousands of ordinary days that created them. Focus on your next step. That is how you build something extraordinary."
+        }
+    ]
+}
