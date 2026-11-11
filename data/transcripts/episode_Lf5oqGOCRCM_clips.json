@@ -1,0 +1,35 @@
+{
+    "episode_id": "Lf5oqGOCRCM",
+    "clips": [
+        {
+            "start": 2214.0,
+            "end": 2264.73,
+            "hook": "I remember the famous Steve Ballmer interview where he's told about the iPhone and he bursts out laughing.",
+            "title": "The Most Famous Tech Prediction That Backfired",
+            "reason": "Starts with a famous corporate story hook where Microsoft's CEO mocked the original iPhone. The build-up features his arrogant dismissal of the price and keyboard, and the payoff hits as the viewer realizes how horribly wrong his confidence was.",
+            "scores": {
+                "curiosity": 9,
+                "storytelling": 9,
+                "payoff": 9,
+                "emotion": 8,
+                "entertainment": 9
+            },
+            "overall_score": 8.85
+        },
+        {
+            "start": 779.7,
+            "end": 829.16,
+            "hook": "On a two hundred dollar a month ChatGPT subscription, you can burn fourteen thousand dollars worth of tokens.",
+            "title": "The Hidden Cost That's Destroying AI Companies",
+            "reason": "The clip hooks the viewer with a mind-boggling financial stat about token burning, builds tension around consumer ignorance of real tech costs, and delivers a shocking payoff detailing OpenAI's massive $20.9B losses.",
+            "scores": {
+                "curiosity": 9,
+                "storytelling": 8,
+                "payoff": 9,
+                "emotion": 8,
+                "entertainment": 9
+            },
+            "overall_score": 8.65
+        }
+    ]
+}

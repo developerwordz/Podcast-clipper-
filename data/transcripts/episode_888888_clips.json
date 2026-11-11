@@ -1,0 +1,75 @@
+{
+    "episode_id": 888888,
+    "clips": [
+        {
+            "start": 1705.96,
+            "end": 1764.13,
+            "hook": "The retention was terrible on the internal version of ChatGPT—it was like 5%.",
+            "title": "ChatGPT Launched With Only 5% Retention",
+            "reason": "Sam shares a masterclass startup lesson on why OpenAI launched ChatGPT despite terrible initial metrics, focusing on intense user love over broad adoption.",
+            "scores": {
+                "hook": 10,
+                "emotion": 8,
+                "storytelling": 9,
+                "standalone": 9
+            },
+            "overall_score": 9.0
+        },
+        {
+            "start": 2788.36,
+            "end": 2843.96,
+            "hook": "The thing that I realized I really missed is going to sit in a coffee shop on a Saturday afternoon...",
+            "title": "What Sam Altman Misses Most About Being Anonymous",
+            "reason": "A deeply vulnerable moment where Sam Altman reflects on the personal cost of fame and the loss of simple, everyday human freedoms.",
+            "scores": {
+                "hook": 8,
+                "emotion": 10,
+                "storytelling": 9,
+                "standalone": 9
+            },
+            "overall_score": 9.0
+        },
+        {
+            "start": 848.49,
+            "end": 911.19,
+            "hook": "I find this one of the most confusing things I have ever observed in my career.",
+            "title": "The Secret OpenAI Saw That Nobody Else Did",
+            "reason": "Sam explains how traditional AI researchers overlooked scaling laws because they believed neural networks couldn't create new knowledge, giving OpenAI a massive head start.",
+            "scores": {
+                "hook": 9,
+                "emotion": 7,
+                "storytelling": 9,
+                "standalone": 9
+            },
+            "overall_score": 8.5
+        },
+        {
+            "start": 1043.28,
+            "end": 1084.65,
+            "hook": "We decided we were going to bet the company on buying up a lot of compute.",
+            "title": "How OpenAI Bet Everything After GPT-4",
+            "reason": "A high-stakes insight into OpenAI's decision-making process right after finishing GPT-4, risking the entire company on massive compute acquisition.",
+            "scores": {
+                "hook": 9,
+                "emotion": 8,
+                "storytelling": 8,
+                "standalone": 9
+            },
+            "overall_score": 8.5
+        },
+        {
+            "start": 419.6,
+            "end": 484.54,
+            "hook": "When I talk to somebody in the US, they're slightly pessimistic about AI, but in India, they're very optimistic.",
+            "title": "Why India Loves AI More Than America",
+            "reason": "Sam Altman reveals the stark contrast in AI sentiment between the US and developing nations like India, highlighting India as one of ChatGPT's fastest-growing markets.",
+            "scores": {
+                "hook": 9,
+                "emotion": 7,
+                "storytelling": 8,
+                "standalone": 9
+            },
+            "overall_score": 8.25
+        }
+    ]
+}

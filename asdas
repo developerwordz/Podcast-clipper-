@@ -1,0 +1,17 @@
+M	config.py
+A	data/audio/Lf5oqGOCRCM.wav
+A	data/audio/sam_altman_test.wav
+A	data/transcripts/episode_888888.json
+A	data/transcripts/episode_888888_clips.json
+A	data/transcripts/episode_Lf5oqGOCRCM.json
+A	data/transcripts/episode_Lf5oqGOCRCM_clips.json
+A	data/videos/Lf5oqGOCRCM.f401.mp4.part
+A	data/videos/Lf5oqGOCRCM.mp4
+A	data/videos/vidssave.com Sam Altman On AI Revolution, Superintelligence & Future Of Humanity _ FO583 Raj Shamani 360P.mp4
+M	database/db.py
+M	discovery/source_manager.py
+A	discovery/youtube_scout.py
+A	intelligence/autopilot.py
+M	intelligence/clip_finder.py
+M	intelligence/video_renderer.py
+M	main.py

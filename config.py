@@ -47,3 +47,14 @@ OUTPUT_DIR = ROOT_DIR / "output" / "clips"
 VIDEO_WIDTH = 1080
 VIDEO_HEIGHT = 1920
 VIDEO_FPS = 30
+
+# YouTube Scout
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+
+DEFAULT_YOUTUBE_SEARCHES = [
+    "AI podcast interview",
+    "business podcast interview",
+    "technology podcast",
+    "entrepreneurship podcast",
+    "science podcast interview",
+]

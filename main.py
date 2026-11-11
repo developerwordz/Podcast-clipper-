@@ -4,8 +4,13 @@ import json
 
 import requests
 
-from config import DEFAULT_SEARCHES
+from config import (
+    DEFAULT_SEARCHES,
+    DEFAULT_YOUTUBE_SEARCHES,
+)
+
 from database.db import initialize_database
+
 from discovery.podcast_search import search_podcasts
 from discovery.rss_reader import fetch_episodes
 
@@ -24,6 +29,17 @@ from discovery.source_manager import (
 
 from intelligence.episode_ranker import rank_episode
 
+from discovery.youtube_scout import (
+    run_youtube_scout,
+    rescore_youtube_videos,
+)
+
+from intelligence.autopilot import run_autopilot
+
+
+# ---------------------------------
+# PODCAST SOURCE MANAGEMENT
+# ---------------------------------
 
 def show_sources():
     rows = list_sources()
@@ -57,7 +73,6 @@ def index_saved_sources(sources):
 
     try:
         for index, source in enumerate(sources, start=1):
-
             name = source["podcast_name"]
 
             print(f"\n[{index}/{len(sources)}] {name}")
@@ -92,12 +107,10 @@ def index_saved_sources(sources):
                 requests.RequestException,
                 TimeoutError
             ) as exc:
-
                 failed += 1
                 print(f"  SKIPPED: network/timeout error: {exc}")
 
             except Exception as exc:
-
                 failed += 1
                 print(f"  SKIPPED: feed error: {exc}")
 
@@ -118,7 +131,6 @@ def run_discovery(search_terms, limit):
     discovered = {}
 
     for term in search_terms:
-
         print(
             f"\nSearching Apple Podcasts directory for: {term}"
         )
@@ -147,7 +159,6 @@ def run_discovery(search_terms, limit):
     saved_count = 0
 
     for source in discovered.values():
-
         try:
             save_source(source)
             saved_count += 1
@@ -171,9 +182,9 @@ def run_discovery(search_terms, limit):
     )
 
 
-# -----------------------------
+# ---------------------------------
 # EPISODE INTELLIGENCE
-# -----------------------------
+# ---------------------------------
 
 def format_duration(seconds):
     if seconds is None:
@@ -198,7 +209,6 @@ def format_duration(seconds):
 
 def rank_pending_episodes():
     pending = get_unranked_episodes()
-
     total = count_episodes()
 
     print("\nCLIPPULSE EPISODE INTELLIGENCE")
@@ -217,7 +227,6 @@ def rank_pending_episodes():
     print("\nAnalysing episodes...\n")
 
     for index, episode in enumerate(pending, start=1):
-
         try:
             result = rank_episode(episode)
 
@@ -253,7 +262,6 @@ def rank_pending_episodes():
 
 
 def show_top_episodes(limit=25, minimum_score=0):
-
     episodes = get_ranked_episodes(
         limit=limit,
         minimum_score=minimum_score
@@ -268,16 +276,12 @@ def show_top_episodes(limit=25, minimum_score=0):
         return
 
     for index, episode in enumerate(episodes, start=1):
-
         score = episode["rank_score"]
         tier = episode["rank_tier"]
 
         print("\n" + "=" * 100)
 
-        print(
-            f'#{index} | {score}/100 | {tier}'
-        )
-
+        print(f'#{index} | {score}/100 | {tier}')
         print(f'Podcast: {episode["podcast_name"]}')
         print(f'Episode: {episode["title"]}')
 
@@ -311,13 +315,10 @@ def show_top_episodes(limit=25, minimum_score=0):
             print(f"  - {reason}")
 
         print(f'Episode URL: {episode["episode_url"] or "N/A"}')
-
-        print(
-            f'Audio URL: '
-            f'{episode["audio_url"] or "N/A"}'
-        )
+        print(f'Audio URL: {episode["audio_url"] or "N/A"}')
 
     print("\n" + "=" * 100)
+
     print(
         "Reminder: A HIGH relevance score does not mean "
         "the episode is cleared for republication."
@@ -325,7 +326,6 @@ def show_top_episodes(limit=25, minimum_score=0):
 
 
 def run_episode_intelligence(limit, minimum_score):
-
     rank_pending_episodes()
 
     show_top_episodes(
@@ -334,9 +334,27 @@ def run_episode_intelligence(limit, minimum_score):
     )
 
 
-# -----------------------------
+# ---------------------------------
+# YOUTUBE SCOUT
+# ---------------------------------
+
+def run_youtube_discovery(
+    queries,
+    results_per_query,
+    minimum_duration,
+    top
+):
+    run_youtube_scout(
+        search_terms=queries,
+        results_per_query=results_per_query,
+        minimum_duration_minutes=minimum_duration,
+        top=top,
+    )
+
+
+# ---------------------------------
 # MAIN
-# -----------------------------
+# ---------------------------------
 
 def main():
 
@@ -347,14 +365,20 @@ def main():
     parser.add_argument(
         "--search",
         action="append",
-        help="Search phrase. Repeat for multiple phrases."
+        help="Search Apple Podcasts. Repeat for multiple phrases."
+    )
+
+    parser.add_argument(
+        "--rescore-youtube",
+        action="store_true",
+        help="Recalculate scores for saved YouTube videos without API requests."
     )
 
     parser.add_argument(
         "--limit",
         type=int,
         default=10,
-        help="Maximum podcast listings per search phrase (1-50)."
+        help="Maximum Apple Podcasts listings per search phrase (1-50)."
     )
 
     parser.add_argument(
@@ -385,49 +409,104 @@ def main():
     parser.add_argument(
         "--rank-episodes",
         action="store_true",
-        help="Rank unranked episodes and display top candidates."
+        help="Rank unranked RSS episodes and display top candidates."
     )
 
     parser.add_argument(
         "--top",
         type=int,
         default=25,
-        help="Number of top episodes to display."
+        help="Number of RSS episodes to display."
     )
 
     parser.add_argument(
         "--min-score",
         type=int,
         default=0,
-        help="Only display episodes with at least this score (0-100)."
+        help="Minimum RSS episode score (0-100)."
+    )
+
+    parser.add_argument(
+        "--youtube-scout",
+        action="store_true",
+        help="Search YouTube and save long-form video discoveries."
+    )
+
+    parser.add_argument(
+        "--youtube-query",
+        action="append",
+        help="YouTube search phrase. Repeat for multiple phrases."
+    )
+
+    parser.add_argument(
+        "--youtube-results-per-query",
+        type=int,
+        default=25,
+        help="Maximum YouTube results per phrase (1-50)."
+    )
+
+    parser.add_argument(
+        "--youtube-min-duration",
+        type=int,
+        default=20,
+        help="Minimum YouTube video duration in minutes."
+    )
+
+    parser.add_argument(
+        "--youtube-top",
+        type=int,
+        default=25,
+        help="Number of top YouTube discoveries to display."
+    )
+
+    parser.add_argument(
+        "--autopilot",
+        action="store_true",
+        help="Discover videos and generate Shorts from available authorised media."
     )
 
     args = parser.parse_args()
 
+    # Database initialization
     initialize_database()
 
+    # Validation
     if args.top < 1:
         parser.error("--top must be at least 1")
 
     if not 0 <= args.min_score <= 100:
         parser.error("--min-score must be between 0 and 100")
 
+    if args.youtube_results_per_query < 1:
+        parser.error("--youtube-results-per-query must be at least 1")
+
+    if args.youtube_min_duration < 1:
+        parser.error("--youtube-min-duration must be at least 1")
+
+    if args.youtube_top < 1:
+        parser.error("--youtube-top must be at least 1")
+
+    # YouTube rescoring
+    if args.rescore_youtube:
+        rescore_youtube_videos()
+        return
+
+    # List podcast sources
     if args.list_sources:
         show_sources()
         return
 
+    # Approve podcast source
     if args.approve_source is not None:
 
         if approve_source(
             args.approve_source,
             args.permission_note
         ):
-
             print(
                 f"Source {args.approve_source} marked APPROVED. "
                 "Keep evidence of the creator's permission."
             )
-
         else:
             print(
                 f"Source ID {args.approve_source} was not found."
@@ -435,6 +514,33 @@ def main():
 
         return
 
+    # AUTOPILOT
+    if args.autopilot:
+        run_autopilot()
+        return
+
+    # YouTube discovery
+    if args.youtube_scout:
+
+        queries = (
+            args.youtube_query
+            if args.youtube_query
+            else DEFAULT_YOUTUBE_SEARCHES
+        )
+
+        run_youtube_discovery(
+            queries=queries,
+            results_per_query=min(
+                args.youtube_results_per_query,
+                50
+            ),
+            minimum_duration=args.youtube_min_duration,
+            top=args.youtube_top,
+        )
+
+        return
+
+    # RSS episode intelligence
     if args.rank_episodes:
 
         run_episode_intelligence(
@@ -444,10 +550,12 @@ def main():
 
         return
 
+    # Refresh existing RSS sources
     if args.refresh_saved:
         index_saved_sources(get_sources())
         return
 
+    # Default Apple Podcasts discovery
     terms = args.search or DEFAULT_SEARCHES
 
     run_discovery(

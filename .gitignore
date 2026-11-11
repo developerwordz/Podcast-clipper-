@@ -5,3 +5,7 @@ __pycache__/
 venv/
 database/*.db
 output/
+data/videos/
+# Local media files
+/data/videos/
+/data/audio/

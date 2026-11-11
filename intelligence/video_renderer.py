@@ -13,7 +13,27 @@ from config import (
 )
 
 
+# ==========================================
+# CAPTION SETTINGS
+# ==========================================
+
+MIN_WORD_CONFIDENCE = 0.15
+
+MAX_WORDS_PER_CAPTION = 5
+MAX_CHARS_PER_CAPTION = 34
+
+MAX_PAUSE_GAP = 0.55
+
+MIN_WORD_DURATION = 0.04
+MIN_CAPTION_DURATION = 0.12
+
+
+# ==========================================
+# FFmpeg UTILITIES
+# ==========================================
+
 def run_command(command):
+
     result = subprocess.run(
         command,
         capture_output=True,
@@ -31,6 +51,7 @@ def run_command(command):
 
 
 def get_video_duration(video_path):
+
     result = run_command([
         "ffprobe",
         "-v", "error",
@@ -43,6 +64,7 @@ def get_video_duration(video_path):
 
 
 def format_ass_time(seconds):
+
     seconds = max(0, float(seconds))
 
     hours = int(seconds // 3600)
@@ -52,15 +74,49 @@ def format_ass_time(seconds):
     return f"{hours}:{minutes:02d}:{secs:05.2f}"
 
 
+# ==========================================
+# SUBTITLE TEXT CLEANING
+# ==========================================
+
 def escape_ass_text(text):
+
     text = str(text)
-    text = text.replace("\\", r"\\")
-    text = text.replace("{", r"\{")
-    text = text.replace("}", r"\}")
-    return text.replace("\n", " ")
+
+    # Prevent subtitle text from being interpreted
+    # as ASS override instructions.
+    text = text.replace("\\", "\\\\")
+    text = text.replace("{", "\\{")
+    text = text.replace("}", "\\}")
+
+    text = text.replace("\n", " ")
+    text = text.replace("\r", " ")
+
+    return text.strip()
 
 
-def get_clip_words(transcript, clip_start, clip_end):
+def clean_word_text(text):
+
+    text = str(text).strip()
+
+    # Remove accidental empty tokens.
+    if not text:
+        return ""
+
+    # Remove repeated whitespace.
+    text = re.sub(r"\s+", " ", text)
+
+    return text
+
+
+# ==========================================
+# WORD EXTRACTION
+# ==========================================
+
+def get_clip_words(
+    transcript,
+    clip_start,
+    clip_end,
+):
 
     words = []
 
@@ -71,52 +127,166 @@ def get_clip_words(transcript, clip_start, clip_end):
             try:
                 start = float(word["start"])
                 end = float(word["end"])
-                text = str(word["word"]).strip()
 
-            except (KeyError, TypeError, ValueError):
+                text = clean_word_text(
+                    word["word"]
+                )
+
+                confidence = float(
+                    word.get("probability", 1.0)
+                )
+
+            except (
+                KeyError,
+                TypeError,
+                ValueError,
+            ):
                 continue
 
             if not text:
                 continue
 
-            if end <= clip_start or start >= clip_end:
+            if end <= clip_start:
+                continue
+
+            if start >= clip_end:
+                continue
+
+            # Remove extremely unreliable recognition.
+            if confidence < MIN_WORD_CONFIDENCE:
+                continue
+
+            clipped_start = max(
+                start,
+                clip_start,
+            )
+
+            clipped_end = min(
+                end,
+                clip_end,
+            )
+
+            if clipped_end <= clipped_start:
                 continue
 
             words.append({
                 "word": text,
-                "start": max(start, clip_start) - clip_start,
-                "end": min(end, clip_end) - clip_start,
+
+                "start": clipped_start - clip_start,
+                "end": clipped_end - clip_start,
+
+                "probability": confidence,
             })
 
-    return sorted(words, key=lambda item: item["start"])
+    words.sort(
+        key=lambda item: item["start"]
+    )
+
+    # Remove duplicate overlapping word detections.
+    cleaned = []
+
+    for word in words:
+
+        if cleaned:
+
+            previous = cleaned[-1]
+
+            same_word = (
+                word["word"].lower()
+                == previous["word"].lower()
+            )
+
+            overlap = (
+                word["start"] < previous["end"]
+            )
+
+            if same_word and overlap:
+                continue
+
+        cleaned.append(word)
+
+    return cleaned
 
 
-def group_words(words, max_words=5):
+# ==========================================
+# CAPTION GROUPING
+# ==========================================
+
+def is_sentence_end(word):
+
+    text = word["word"].rstrip(
+        "\"'”’)]}"
+    )
+
+    return text.endswith(
+        (".", "?", "!")
+    )
+
+
+def group_words(
+    words,
+    max_words=MAX_WORDS_PER_CAPTION,
+):
 
     groups = []
     current = []
 
     for word in words:
 
-        current.append(word)
+        if not current:
+            current.append(word)
+            continue
 
-        clean_word = word["word"].rstrip(
-            "\"'”’)]}"
+        previous = current[-1]
+
+        pause = (
+            word["start"] - previous["end"]
         )
 
-        sentence_end = clean_word.endswith(
-            (".", "?", "!")
+        current_text = " ".join(
+            item["word"] for item in current
         )
 
-        if len(current) >= max_words or sentence_end:
+        proposed_length = (
+            len(current_text)
+            + 1
+            + len(word["word"])
+        )
+
+        # Break on long silence.
+        if pause > MAX_PAUSE_GAP:
             groups.append(current)
-            current = []
+            current = [word]
+            continue
+
+        # Break after completed sentences.
+        if is_sentence_end(previous):
+            groups.append(current)
+            current = [word]
+            continue
+
+        # Keep captions readable.
+        if len(current) >= max_words:
+            groups.append(current)
+            current = [word]
+            continue
+
+        if proposed_length > MAX_CHARS_PER_CAPTION:
+            groups.append(current)
+            current = [word]
+            continue
+
+        current.append(word)
 
     if current:
         groups.append(current)
 
     return groups
 
+
+# ==========================================
+# KARAOKE SUBTITLE GENERATION
+# ==========================================
 
 def create_ass_subtitles(
     transcript,
@@ -133,7 +303,8 @@ def create_ass_subtitles(
 
     if not words:
         raise ValueError(
-            "No word timestamps found for this clip."
+            "No reliable word timestamps found "
+            "for this clip."
         )
 
     header = r"""[Script Info]
@@ -153,25 +324,56 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     events = []
 
-    for group in group_words(words):
+    groups = group_words(words)
+
+    for group in groups:
 
         start = group[0]["start"]
-        end = max(group[-1]["end"], start + 0.12)
+
+        end = max(
+            group[-1]["end"],
+            start + MIN_CAPTION_DURATION,
+        )
 
         karaoke_text = []
 
-        for item in group:
+        for index, item in enumerate(group):
 
-            duration = max(
+            word_start = item["start"]
+            word_end = item["end"]
+
+            # Make karaoke timing follow actual word starts.
+            # This prevents highlighting from drifting during pauses.
+            if index + 1 < len(group):
+
+                next_start = group[index + 1]["start"]
+
+                duration_seconds = max(
+                    MIN_WORD_DURATION,
+                    next_start - word_start,
+                )
+
+            else:
+
+                duration_seconds = max(
+                    MIN_WORD_DURATION,
+                    word_end - word_start,
+                )
+
+            duration_cs = max(
                 1,
-                round(
-                    (item["end"] - item["start"]) * 100
-                ),
+                round(duration_seconds * 100),
+            )
+
+            escaped_word = escape_ass_text(
+                item["word"]
             )
 
             karaoke_text.append(
-                r"{\k" + str(duration) + "}"
-                + escape_ass_text(item["word"])
+                r"{\kf"
+                + str(duration_cs)
+                + "}"
+                + escaped_word
             )
 
         line = " ".join(karaoke_text)
@@ -188,16 +390,35 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         encoding="utf-8-sig",
     )
 
+    print(
+        f"[Captions] {len(words)} reliable words, "
+        f"{len(groups)} caption groups"
+    )
+
+
+# ==========================================
+# WINDOWS FILTER PATH HANDLING
+# ==========================================
 
 def escape_filter_path(path):
 
-    path = str(Path(path).resolve())
+    path = str(
+        Path(path).resolve()
+    )
+
     path = path.replace("\\", "/")
+
+    # FFmpeg filter syntax requires escaped drive colon.
     path = path.replace(":", r"\:")
+
     path = path.replace("'", r"\'")
 
     return path
 
+
+# ==========================================
+# VIDEO RENDERING
+# ==========================================
 
 def render_clip(
     video_path,
@@ -216,9 +437,13 @@ def render_clip(
     end = float(clip["end"])
 
     if start < 0 or end <= start:
-        raise ValueError("Invalid clip timestamps.")
+        raise ValueError(
+            "Invalid clip timestamps."
+        )
 
-    duration = get_video_duration(video_path)
+    duration = get_video_duration(
+        video_path
+    )
 
     if end > duration:
         raise ValueError(
@@ -233,7 +458,9 @@ def render_clip(
 
     with tempfile.TemporaryDirectory() as temp_dir:
 
-        ass_path = Path(temp_dir) / "captions.ass"
+        ass_path = (
+            Path(temp_dir) / "captions.ass"
+        )
 
         create_ass_subtitles(
             transcript,
@@ -242,19 +469,35 @@ def render_clip(
             ass_path,
         )
 
-        subtitle_path = escape_filter_path(ass_path)
+        subtitle_path = escape_filter_path(
+            ass_path
+        )
 
         filter_graph = (
             f"[0:v]split=2[bg][fg];"
-            f"[bg]scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:"
+
+            # Background: fill portrait canvas.
+            f"[bg]"
+            f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:"
             f"force_original_aspect_ratio=increase,"
             f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT},"
-            f"boxblur=24:12[background];"
-            f"[fg]scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:"
-            f"force_original_aspect_ratio=decrease[foreground];"
-            f"[background][foreground]overlay="
-            f"(W-w)/2:(H-h)/2,"
-            f"subtitles='{subtitle_path}'[v]"
+            f"boxblur=24:12,"
+            f"eq=brightness=-0.12"
+            f"[background];"
+
+            # Foreground: preserve complete source frame.
+            f"[fg]"
+            f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:"
+            f"force_original_aspect_ratio=decrease"
+            f"[foreground];"
+
+            # Center the original frame.
+            f"[background][foreground]"
+            f"overlay=(W-w)/2:(H-h)/2,"
+            
+            # Burn captions.
+            f"subtitles='{subtitle_path}'"
+            f"[v]"
         )
 
         command = [
@@ -292,6 +535,10 @@ def render_clip(
     return output_path
 
 
+# ==========================================
+# EPISODE CLIP BATCH RENDERING
+# ==========================================
+
 def render_episode_clips(
     video_path,
     transcript_path,
@@ -304,18 +551,29 @@ def render_episode_clips(
     transcript_path = Path(transcript_path)
     clips_path = Path(clips_path)
 
-    with open(transcript_path, encoding="utf-8") as file:
+    with open(
+        transcript_path,
+        encoding="utf-8",
+    ) as file:
+
         transcript = json.load(file)
 
-    with open(clips_path, encoding="utf-8") as file:
+    with open(
+        clips_path,
+        encoding="utf-8",
+    ) as file:
+
         clip_data = json.load(file)
 
     clips = clip_data.get("clips", [])
 
     selected = [
-        clip for clip in clips
-        if float(clip.get("overall_score", 0))
-        >= min_score
+        clip
+        for clip in clips
+
+        if float(
+            clip.get("overall_score", 0)
+        ) >= min_score
     ]
 
     selected.sort(
@@ -339,10 +597,16 @@ def render_episode_clips(
 
     rendered = []
 
-    for index, clip in enumerate(selected, start=1):
+    for index, clip in enumerate(
+        selected,
+        start=1,
+    ):
 
         title = str(
-            clip.get("title", f"clip_{index}")
+            clip.get(
+                "title",
+                f"clip_{index}",
+            )
         )
 
         safe_title = re.sub(
@@ -356,9 +620,16 @@ def render_episode_clips(
             / f"{index:02d}_{safe_title}.mp4"
         )
 
-        print(f"\nRendering clip {index}/{len(selected)}")
+        print(
+            f"\nRendering clip {index}/{len(selected)}"
+        )
+
         print(f"Title: {title}")
-        print(f"Score: {clip.get('overall_score', 'N/A')}")
+
+        print(
+            f"Score: "
+            f"{clip.get('overall_score', 'N/A')}"
+        )
 
         render_clip(
             video_path,

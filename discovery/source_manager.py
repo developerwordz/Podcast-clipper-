@@ -75,7 +75,6 @@ def save_episodes(source_id: int, episodes):
 
     with get_connection() as conn:
         for episode in episodes:
-
             cursor = conn.execute(
                 """
                 INSERT OR IGNORE INTO episodes
@@ -87,19 +86,31 @@ def save_episodes(source_id: int, episodes):
                         published_at,
                         duration_seconds,
                         episode_url,
-                        audio_url
+                        audio_url,
+                        platform,
+                        youtube_video_id,
+                        view_count,
+                        like_count,
+                        comment_count,
+                        youtube_score
                     )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     source_id,
                     episode["episode_guid"],
                     episode["title"],
-                    episode["description"],
-                    episode["published_at"],
-                    episode["duration_seconds"],
-                    episode["episode_url"],
-                    episode["audio_url"],
+                    episode.get("description"),
+                    episode.get("published_at"),
+                    episode.get("duration_seconds"),
+                    episode.get("episode_url"),
+                    episode.get("audio_url"),
+                    episode.get("platform", "podcast"),
+                    episode.get("youtube_video_id"),
+                    episode.get("view_count", 0),
+                    episode.get("like_count", 0),
+                    episode.get("comment_count", 0),
+                    episode.get("youtube_score"),
                 ),
             )
 
@@ -122,8 +133,6 @@ def save_episodes(source_id: int, episodes):
 # -----------------------------
 
 def get_unranked_episodes():
-    """Return episodes that have not yet received a ranking."""
-
     with get_connection() as conn:
         return conn.execute(
             """
@@ -141,8 +150,6 @@ def get_unranked_episodes():
 
 
 def save_episode_rank(episode_id, result):
-    """Save an episode's score, tier and explanation."""
-
     reasons_json = json.dumps(
         result["reasons"],
         ensure_ascii=False
@@ -169,8 +176,6 @@ def save_episode_rank(episode_id, result):
 
 
 def get_ranked_episodes(limit=25, minimum_score=0):
-    """Return the highest-scoring ranked episodes."""
-
     with get_connection() as conn:
         return conn.execute(
             """
