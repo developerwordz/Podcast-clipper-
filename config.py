@@ -39,7 +39,7 @@ MAX_AUDIO_SIZE_MB = int(
     os.getenv("MAX_AUDIO_SIZE_MB", "1000")
 )
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 # Video processing
 VIDEO_DIR = ROOT_DIR / "data" / "videos"
 OUTPUT_DIR = ROOT_DIR / "output" / "clips"

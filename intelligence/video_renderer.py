@@ -29,7 +29,7 @@ MIN_CAPTION_DURATION = 0.12
 
 
 # ==========================================
-# FFmpeg UTILITIES
+# FFMPEG UTILITIES
 # ==========================================
 
 def run_command(command):
@@ -63,6 +63,20 @@ def get_video_duration(video_path):
     return float(result.stdout.strip())
 
 
+def has_audio_stream(video_path):
+
+    result = run_command([
+        "ffprobe",
+        "-v", "error",
+        "-select_streams", "a:0",
+        "-show_entries", "stream=index",
+        "-of", "csv=p=0",
+        str(video_path),
+    ])
+
+    return bool(result.stdout.strip())
+
+
 def format_ass_time(seconds):
 
     seconds = max(0, float(seconds))
@@ -82,8 +96,6 @@ def escape_ass_text(text):
 
     text = str(text)
 
-    # Prevent subtitle text from being interpreted
-    # as ASS override instructions.
     text = text.replace("\\", "\\\\")
     text = text.replace("{", "\\{")
     text = text.replace("}", "\\}")
@@ -98,14 +110,69 @@ def clean_word_text(text):
 
     text = str(text).strip()
 
-    # Remove accidental empty tokens.
     if not text:
         return ""
 
-    # Remove repeated whitespace.
-    text = re.sub(r"\s+", " ", text)
+    return re.sub(r"\s+", " ", text)
 
-    return text
+
+# ==========================================
+# SEGMENT HANDLING
+# ==========================================
+
+def get_clip_segments(clip):
+
+    raw_segments = clip.get("segments")
+
+    # Backward compatibility with old single-range clips.
+    if not raw_segments:
+        raw_segments = [{
+            "start": clip["start"],
+            "end": clip["end"],
+        }]
+
+    segments = []
+
+    for item in raw_segments:
+
+        start = float(item["start"])
+        end = float(item["end"])
+
+        if start < 0 or end <= start:
+            raise ValueError(
+                f"Invalid segment: {start} - {end}"
+            )
+
+        segments.append({
+            "start": start,
+            "end": end,
+        })
+
+    if not segments:
+        raise ValueError("Clip contains no segments.")
+
+    # Segments must remain in original chronological order.
+    segments.sort(key=lambda item: item["start"])
+
+    for index in range(1, len(segments)):
+
+        previous = segments[index - 1]
+        current = segments[index]
+
+        if current["start"] < previous["end"]:
+            raise ValueError(
+                "Clip segments overlap."
+            )
+
+    total_duration = sum(
+        item["end"] - item["start"]
+        for item in segments
+    )
+
+    if total_duration <= 0:
+        raise ValueError("Invalid total clip duration.")
+
+    return segments
 
 
 # ==========================================
@@ -152,37 +219,24 @@ def get_clip_words(
             if start >= clip_end:
                 continue
 
-            # Remove extremely unreliable recognition.
             if confidence < MIN_WORD_CONFIDENCE:
                 continue
 
-            clipped_start = max(
-                start,
-                clip_start,
-            )
-
-            clipped_end = min(
-                end,
-                clip_end,
-            )
+            clipped_start = max(start, clip_start)
+            clipped_end = min(end, clip_end)
 
             if clipped_end <= clipped_start:
                 continue
 
             words.append({
                 "word": text,
-
                 "start": clipped_start - clip_start,
                 "end": clipped_end - clip_start,
-
                 "probability": confidence,
             })
 
-    words.sort(
-        key=lambda item: item["start"]
-    )
+    words.sort(key=lambda item: item["start"])
 
-    # Remove duplicate overlapping word detections.
     cleaned = []
 
     for word in words:
@@ -206,6 +260,46 @@ def get_clip_words(
         cleaned.append(word)
 
     return cleaned
+
+
+def get_segmented_clip_words(
+    transcript,
+    segments,
+):
+
+    all_words = []
+    timeline_offset = 0.0
+
+    for segment in segments:
+
+        source_start = segment["start"]
+        source_end = segment["end"]
+
+        segment_words = get_clip_words(
+            transcript,
+            source_start,
+            source_end,
+        )
+
+        # Shift source timestamps onto the joined video timeline.
+        for word in segment_words:
+
+            all_words.append({
+                "word": word["word"],
+                "start": word["start"] + timeline_offset,
+                "end": word["end"] + timeline_offset,
+                "probability": word["probability"],
+            })
+
+        timeline_offset += (
+            source_end - source_start
+        )
+
+    all_words.sort(
+        key=lambda item: item["start"]
+    )
+
+    return all_words
 
 
 # ==========================================
@@ -253,19 +347,16 @@ def group_words(
             + len(word["word"])
         )
 
-        # Break on long silence.
         if pause > MAX_PAUSE_GAP:
             groups.append(current)
             current = [word]
             continue
 
-        # Break after completed sentences.
         if is_sentence_end(previous):
             groups.append(current)
             current = [word]
             continue
 
-        # Keep captions readable.
         if len(current) >= max_words:
             groups.append(current)
             current = [word]
@@ -293,18 +384,24 @@ def create_ass_subtitles(
     clip_start,
     clip_end,
     output_path,
+    segments=None,
 ):
 
-    words = get_clip_words(
-        transcript,
-        clip_start,
-        clip_end,
-    )
+    if segments:
+        words = get_segmented_clip_words(
+            transcript,
+            segments,
+        )
+    else:
+        words = get_clip_words(
+            transcript,
+            clip_start,
+            clip_end,
+        )
 
     if not words:
         raise ValueError(
-            "No reliable word timestamps found "
-            "for this clip."
+            "No reliable word timestamps found for this clip."
         )
 
     header = r"""[Script Info]
@@ -342,8 +439,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             word_start = item["start"]
             word_end = item["end"]
 
-            # Make karaoke timing follow actual word starts.
-            # This prevents highlighting from drifting during pauses.
             if index + 1 < len(group):
 
                 next_start = group[index + 1]["start"]
@@ -407,15 +502,176 @@ def escape_filter_path(path):
     )
 
     path = path.replace("\\", "/")
-
-    # FFmpeg filter syntax requires escaped drive colon.
     path = path.replace(":", r"\:")
-
     path = path.replace("'", r"\'")
 
     return path
 
 
+# ==========================================
+# VIDEO FILTER GRAPH
+# ==========================================
+
+
+def build_filter_graph(
+    segments,
+    subtitle_path,
+    audio_enabled,
+):
+
+    filters = []
+
+    segment_count = len(segments)
+
+    if segment_count == 0:
+        raise ValueError("No video segments provided.")
+
+    # ======================================
+    # VIDEO SEGMENTS
+    # ======================================
+
+    if segment_count == 1:
+
+        segment = segments[0]
+
+        filters.append(
+            f"[0:v]"
+            f"trim=start={segment['start']}:"
+            f"end={segment['end']},"
+            f"setpts=PTS-STARTPTS"
+            f"[joined]"
+        )
+
+    else:
+
+        split_outputs = "".join(
+            f"[vsource{i}]"
+            for i in range(segment_count)
+        )
+
+        filters.append(
+            f"[0:v]split={segment_count}{split_outputs}"
+        )
+
+        video_labels = []
+
+        for index, segment in enumerate(segments):
+
+            output_label = f"v{index}"
+
+            filters.append(
+                f"[vsource{index}]"
+                f"trim=start={segment['start']}:"
+                f"end={segment['end']},"
+                f"setpts=PTS-STARTPTS"
+                f"[{output_label}]"
+            )
+
+            video_labels.append(
+                f"[{output_label}]"
+            )
+
+        filters.append(
+            "".join(video_labels)
+            + f"concat=n={segment_count}:v=1:a=0[joined]"
+        )
+
+    # ======================================
+    # AUDIO SEGMENTS
+    # ======================================
+
+    if audio_enabled:
+
+        if segment_count == 1:
+
+            segment = segments[0]
+
+            filters.append(
+                f"[0:a]"
+                f"atrim=start={segment['start']}:"
+                f"end={segment['end']},"
+                f"asetpts=PTS-STARTPTS"
+                f"[aout]"
+            )
+
+        else:
+
+            split_outputs = "".join(
+                f"[asource{i}]"
+                for i in range(segment_count)
+            )
+
+            filters.append(
+                f"[0:a]asplit={segment_count}{split_outputs}"
+            )
+
+            audio_labels = []
+
+            for index, segment in enumerate(segments):
+
+                output_label = f"a{index}"
+
+                filters.append(
+                    f"[asource{index}]"
+                    f"atrim=start={segment['start']}:"
+                    f"end={segment['end']},"
+                    f"asetpts=PTS-STARTPTS"
+                    f"[{output_label}]"
+                )
+
+                audio_labels.append(
+                    f"[{output_label}]"
+                )
+
+            filters.append(
+                "".join(audio_labels)
+                + f"concat=n={segment_count}:v=0:a=1[aout]"
+            )
+
+    # ======================================
+    # SUBTITLES
+    # ======================================
+
+    subtitle_path = escape_filter_path(
+        subtitle_path
+    )
+
+    # ======================================
+    # PORTRAIT COMPOSITION
+    # ======================================
+
+    filters.append(
+        "[joined]split=2[bg][fg]"
+    )
+
+    # Blurred enlarged background.
+    filters.append(
+        f"[bg]"
+        f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:"
+        f"force_original_aspect_ratio=increase,"
+        f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT},"
+        f"boxblur=24:12,"
+        f"eq=brightness=-0.12"
+        f"[background]"
+    )
+
+    # Preserve the complete original frame.
+    filters.append(
+        f"[fg]"
+        f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:"
+        f"force_original_aspect_ratio=decrease"
+        f"[foreground]"
+    )
+
+    # Combine background, foreground and captions.
+    filters.append(
+        "[background][foreground]"
+        "overlay=(W-w)/2:(H-h)/2,"
+        f"subtitles='{subtitle_path}'"
+        "[vout]"
+    )
+
+    return ";".join(filters)
 # ==========================================
 # VIDEO RENDERING
 # ==========================================
@@ -433,27 +689,40 @@ def render_clip(
     if not video_path.exists():
         raise FileNotFoundError(video_path)
 
-    start = float(clip["start"])
-    end = float(clip["end"])
+    segments = get_clip_segments(clip)
 
-    if start < 0 or end <= start:
-        raise ValueError(
-            "Invalid clip timestamps."
-        )
-
-    duration = get_video_duration(
+    source_duration = get_video_duration(
         video_path
     )
 
-    if end > duration:
-        raise ValueError(
-            f"Clip ends at {end:.2f}s, "
-            f"but video duration is {duration:.2f}s."
-        )
+    for segment in segments:
+
+        if segment["end"] > source_duration:
+
+            raise ValueError(
+                f"Segment ends at {segment['end']:.2f}s, "
+                f"but video duration is "
+                f"{source_duration:.2f}s."
+            )
+
+    total_duration = sum(
+        item["end"] - item["start"]
+        for item in segments
+    )
+
+    print(
+        f"[Story Compression] "
+        f"{len(segments)} segments | "
+        f"{total_duration:.1f}s final duration"
+    )
 
     output_path.parent.mkdir(
         parents=True,
         exist_ok=True,
+    )
+
+    audio_enabled = has_audio_stream(
+        video_path
     )
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -464,57 +733,38 @@ def render_clip(
 
         create_ass_subtitles(
             transcript,
-            start,
-            end,
+            segments[0]["start"],
+            segments[-1]["end"],
             ass_path,
+            segments=segments,
         )
 
-        subtitle_path = escape_filter_path(
-            ass_path
-        )
-
-        filter_graph = (
-            f"[0:v]split=2[bg][fg];"
-
-            # Background: fill portrait canvas.
-            f"[bg]"
-            f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:"
-            f"force_original_aspect_ratio=increase,"
-            f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT},"
-            f"boxblur=24:12,"
-            f"eq=brightness=-0.12"
-            f"[background];"
-
-            # Foreground: preserve complete source frame.
-            f"[fg]"
-            f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:"
-            f"force_original_aspect_ratio=decrease"
-            f"[foreground];"
-
-            # Center the original frame.
-            f"[background][foreground]"
-            f"overlay=(W-w)/2:(H-h)/2,"
-            
-            # Burn captions.
-            f"subtitles='{subtitle_path}'"
-            f"[v]"
+        filter_graph = build_filter_graph(
+            segments,
+            ass_path,
+            audio_enabled,
         )
 
         command = [
             "ffmpeg",
             "-y",
 
-            "-ss", str(start),
             "-i", str(video_path),
-
-            "-t", str(end - start),
 
             "-filter_complex",
             filter_graph,
 
-            "-map", "[v]",
-            "-map", "0:a?",
+            "-map", "[vout]",
+        ]
 
+        if audio_enabled:
+            command.extend([
+                "-map", "[aout]",
+                "-c:a", "aac",
+                "-b:a", "192k",
+            ])
+
+        command.extend([
             "-r", str(VIDEO_FPS),
 
             "-c:v", "libx264",
@@ -522,13 +772,10 @@ def render_clip(
             "-crf", "20",
             "-pix_fmt", "yuv420p",
 
-            "-c:a", "aac",
-            "-b:a", "192k",
-
             "-movflags", "+faststart",
 
             str(output_path),
-        ]
+        ])
 
         run_command(command)
 
@@ -570,7 +817,6 @@ def render_episode_clips(
     selected = [
         clip
         for clip in clips
-
         if float(
             clip.get("overall_score", 0)
         ) >= min_score

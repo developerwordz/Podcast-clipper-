@@ -19,18 +19,18 @@ MAX_VIDEOS_PER_CHANNEL = 3
 # Curiosity-first search strategy. Keep this list compact because each
 # YouTube search.list request consumes API quota.
 CURIOSITY_SEARCHES = [
-    "podcast unbelievable true story full episode",
-    "podcast shocking confession full interview",
-    "podcast craziest thing that ever happened full episode",
-    "podcast strange experience unbelievable story",
-    "podcast biggest mistake disaster story interview",
-    "podcast controversial opinion heated debate full episode",
-    "podcast secret revelation nobody knows full interview",
-    "podcast near death experience survival story interview",
-    "founder business failure collapse story podcast",
-    "celebrity awkward embarrassing story podcast interview",
-    "wild coincidence unbelievable encounter podcast",
-    "people tell their most insane story podcast",
+    "podcast craziest true story guest has ever experienced",
+    "podcast unbelievable personal story that actually happened",
+    "podcast I almost died real life story full interview",
+    "podcast escaped kidnapping survival story interview",
+    "podcast undercover secret operation story former agent interview",
+    "podcast biggest betrayal scam con artist true story interview",
+    "podcast wildest backstage celebrity story full interview",
+    "podcast bizarre encounter unexplained experience true story",
+    "podcast worst day of my life unbelievable story interview",
+    "podcast shocking confession never told anyone full episode",
+    "podcast insane coincidence real life story full interview",
+    "podcast craziest thing you have ever witnessed story",
 ]
 
 # Metadata can only estimate story potential. Gemini validates the actual
@@ -42,35 +42,68 @@ CURIOSITY_TERMS = {
     "disaster", "collapse", "failure", "mistake", "regret",
     "embarrassing", "awkward", "controversial", "wild",
     "survived", "survival", "terrifying", "crazy", "happened",
+    "escaped", "kidnapped", "betrayed", "scammed", "confronted",
+    "witnessed", "confessed", "disappeared", "vanished", "trapped",
 }
 
 STORY_TERMS = {
-    "story", "happened", "experience", "moment", "day",
-    "when", "almost", "once", "met", "found", "lost",
-    "survived", "discovered", "confession", "regret",
-    "incident", "encounter", "night", "first", "last",
+    "story", "happened", "experience", "moment", "day", "almost",
+    "once", "met", "found", "lost", "survived", "discovered",
+    "confession", "regret", "incident", "encounter", "night",
+    "escaped", "witnessed", "betrayed", "kidnapped", "trapped",
+    "rescued", "fired", "arrested", "disappeared", "revealed",
 }
 
 EMOTION_TERMS = {
-    "fear", "terrifying", "shocking", "angry", "crying",
-    "regret", "heartbreaking", "humiliated", "betrayed",
-    "insulted", "panic", "nightmare", "trauma", "revenge",
-    "love", "hate", "jealous", "fired", "cheated",
+    "fear", "terrifying", "shocking", "angry", "crying", "regret",
+    "heartbreaking", "humiliated", "betrayed", "insulted", "panic",
+    "nightmare", "trauma", "revenge", "love", "hate", "jealous",
+    "fired", "cheated", "trapped", "abandoned", "threatened",
+    "ashamed", "devastated", "furious", "terrified",
 }
 
 ENTERTAINMENT_TERMS = {
     "funniest", "craziest", "wild", "awkward", "embarrassing",
-    "ridiculous", "insane", "prank", "fight", "argument",
-    "roast", "unfiltered", "drunk", "dating", "caught",
-    "confronted", "reaction", "hilarious",
+    "ridiculous", "insane", "prank", "fight", "argument", "roast",
+    "unfiltered", "drunk", "dating", "caught", "confronted",
+    "reaction", "hilarious", "chaos", "disaster", "revenge",
 }
 
 SURPRISE_TERMS = {
-    "unexpected", "plot", "twist", "secret", "revealed",
-    "turns", "turned", "instead", "nobody", "never",
-    "suddenly", "shocking", "discovered", "exposed",
-    "truth", "coincidence", "impossible", "against",
+    "unexpected", "plot", "twist", "secret", "revealed", "turns",
+    "turned", "instead", "nobody", "never", "suddenly", "shocking",
+    "discovered", "exposed", "truth", "coincidence", "impossible",
+    "against", "actually", "pretended", "hidden", "mistaken",
 }
+
+STORY_PHRASES = (
+    "i almost died", "i was kidnapped", "i escaped", "i lost everything",
+    "i never told anyone", "the worst day of my life", "the craziest thing",
+    "nobody believed me", "they tried to kill me", "i found out",
+    "it was a setup", "i was betrayed", "what happened next",
+    "the whole thing was fake", "i thought i was going to die",
+    "i had no idea", "this actually happened", "the truth came out",
+)
+
+CURIOSITY_PHRASES = (
+    "wasn't supposed to", "never meant to", "kept it secret",
+    "nobody knows", "you won't believe", "one mistake", "almost got killed",
+    "the truth about", "what they found", "what happened next",
+    "turned out to be", "not what it seemed",
+)
+
+EDUCATIONAL_TERMS = {
+    "advice", "tips", "habits", "routine", "productivity", "lessons",
+    "explained", "guide", "tutorial", "principles", "framework",
+    "strategies", "mindset", "discipline", "optimization", "learn",
+    "learning", "howto", "how", "steps", "methods", "techniques",
+}
+
+EDUCATIONAL_PHRASES = (
+    "how to", "best advice", "daily habits", "science behind",
+    "tips for", "lessons from", "step by step", "complete guide",
+    "how it works", "ways to improve", "change your life",
+)
 
 PODCAST_CHANNEL_HINTS = [
     "diary of a ceo",
@@ -297,7 +330,7 @@ def youtube_request(endpoint, params):
     return response.json()
 
 
-def search_youtube(query, limit=25):
+def search_youtube(query, limit=25, order="relevance"):
 
     data = youtube_request(
         "search",
@@ -306,7 +339,7 @@ def search_youtube(query, limit=25):
             "q": query,
             "type": "video",
             "videoDuration": "long",
-            "order": "viewCount",
+            "order": order,
             "maxResults": max(1, min(limit, 50)),
         }
     )
@@ -739,25 +772,54 @@ def calculate_momentum_score(views_per_day):
 # ==================================================
 
 
-def _keyword_score(text, terms, saturation=4):
-    """Convert distinct title/description keyword hits into a 0-100 proxy."""
-    words = set(re.findall(r"[a-zA-Z0-9']+", (text or "").lower()))
-    hits = words & terms
-    return round(min(100, (len(hits) / saturation) * 100), 2)
+def _metadata_signal_score(title, description, terms, saturation=4):
+    """Score title evidence more heavily than description keyword stuffing."""
+    title_words = set(re.findall(r"[a-zA-Z0-9']+", (title or "").lower()))
+    description_words = set(re.findall(r"[a-zA-Z0-9']+", (description or "").lower()))
+
+    title_hits = title_words & terms
+    description_hits = description_words & terms
+
+    raw = (len(title_hits) * 22) + (min(len(description_hits), 8) * 5)
+    return round(min(100, (raw / max(1, saturation * 22)) * 100), 2)
+
+
+def _phrase_signal_score(title, description, phrases):
+    title_text = (title or "").lower()
+    description_text = (description or "").lower()
+    title_hits = sum(1 for phrase in phrases if phrase in title_text)
+    description_hits = sum(1 for phrase in phrases if phrase in description_text)
+    return round(min(100, title_hits * 35 + description_hits * 8), 2)
+
+
+def calculate_educational_penalty(title, description):
+    """Gently demote lecture/advice framing; do not reject a story for one keyword."""
+    title_text = (title or "").lower()
+    description_text = (description or "").lower()
+    title_hits = sum(1 for term in EDUCATIONAL_TERMS if re.search(r"\b" + re.escape(term) + r"\b", title_text))
+    description_hits = sum(1 for term in EDUCATIONAL_TERMS if re.search(r"\b" + re.escape(term) + r"\b", description_text))
+    phrase_hits = sum(1 for phrase in EDUCATIONAL_PHRASES if phrase in title_text)
+    return round(min(100, title_hits * 12 + min(description_hits, 5) * 3 + phrase_hits * 15), 2)
 
 
 def calculate_curiosity_scores(title, description):
-    """Estimate entertainment/story potential from public metadata only."""
-    text = f"{title or ''} {description or ''}"
-
+    """Estimate story potential from public metadata; this is not transcript analysis."""
     return {
-        "curiosity": _keyword_score(text, CURIOSITY_TERMS, saturation=4),
-        "storytelling": _keyword_score(text, STORY_TERMS, saturation=4),
-        "emotion": _keyword_score(text, EMOTION_TERMS, saturation=3),
-        "entertainment": _keyword_score(text, ENTERTAINMENT_TERMS, saturation=3),
-        "surprise": _keyword_score(text, SURPRISE_TERMS, saturation=3),
+        "curiosity": round(min(100, max(
+            _metadata_signal_score(title, description, CURIOSITY_TERMS, 3),
+            _phrase_signal_score(title, description, CURIOSITY_PHRASES),
+        )), 2),
+        "storytelling": round(min(100, max(
+            _metadata_signal_score(title, description, STORY_TERMS, 3),
+            _phrase_signal_score(title, description, STORY_PHRASES),
+        )), 2),
+        "emotion": _metadata_signal_score(title, description, EMOTION_TERMS, 3),
+        "entertainment": _metadata_signal_score(title, description, ENTERTAINMENT_TERMS, 3),
+        "surprise": round(min(100, max(
+            _metadata_signal_score(title, description, SURPRISE_TERMS, 3),
+            _phrase_signal_score(title, description, CURIOSITY_PHRASES),
+        )), 2),
     }
-
 
 def calculate_final_score(
     curiosity,
@@ -767,7 +829,7 @@ def calculate_final_score(
     surprise,
     traction,
 ):
-    """Scout V4 weighted score: curiosity-first, not education-first."""
+    """Scout V5 weighted score: curiosity-first, not education-first."""
     score = (
         curiosity * 0.25
         + storytelling * 0.25
@@ -788,7 +850,7 @@ def evaluate_video(video, views_per_day=None):
     )
 
     # Keep the existing relevance calculation for diagnostics, but do not
-    # let broad AI/business keywords dominate the V4 curiosity score.
+    # let broad AI/business keywords dominate the V5 curiosity score.
     relevance = calculate_relevance(
         video["title"],
         video["description"],
@@ -819,7 +881,12 @@ def evaluate_video(video, views_per_day=None):
         video["description"],
     )
 
-    final_score = calculate_final_score(
+    educational_penalty = calculate_educational_penalty(
+        video["title"],
+        video["description"],
+    )
+
+    raw_score = calculate_final_score(
         curiosity_scores["curiosity"],
         curiosity_scores["storytelling"],
         curiosity_scores["emotion"],
@@ -827,22 +894,24 @@ def evaluate_video(video, views_per_day=None):
         curiosity_scores["surprise"],
         traction,
     )
+    final_score = round(max(0, raw_score - educational_penalty * 0.12), 2)
 
     reasons = {
-        "scout_version": 4,
+        "scout_version": 5,
         "category": classification["category"],
         "confidence": classification["confidence"],
         "classification_reason": classification["reason"],
         "relevance": relevance,
         **curiosity_scores,
         "traction": traction,
+        "educational_penalty": educational_penalty,
         "engagement": engagement,
         "engagement_rate": round(engagement_rate, 3),
         "recency": recency,
         "momentum": momentum,
         "views_per_day": views_per_day,
         "score": final_score,
-        "scoring_note": "Metadata-based estimate; transcript review determines actual story quality.",
+        "scoring_note": "V5 metadata-based estimate; transcript review determines actual story quality.",
     }
 
     return final_score, reasons
@@ -1077,7 +1146,7 @@ def show_top_youtube_videos(
         if len(selected) >= limit:
             break
 
-    print("\nTOP YOUTUBE DISCOVERIES — SCOUT V4 | CURIOSITY-FIRST")
+    print("\nTOP YOUTUBE DISCOVERIES — SCOUT V5 | STORY-FIRST")
     print("=" * 100)
 
     if not selected:
@@ -1117,6 +1186,7 @@ def show_top_youtube_videos(
         print(f'Entertainment proxy: {reasons.get("entertainment", 0)}/100')
         print(f'Surprise proxy: {reasons.get("surprise", 0)}/100')
         print(f'Traction: {reasons.get("traction", 0)}/100')
+        print(f'Educational framing penalty: {reasons.get("educational_penalty", 0)}/100')
         print(f'Format confidence: {reasons.get("confidence", "unknown")}')
 
         momentum = reasons.get("momentum")
@@ -1138,7 +1208,7 @@ def show_top_youtube_videos(
 
     print("\n" + "=" * 100)
     print(
-        "V4 scores estimate curiosity/story potential from public metadata. "
+        "V5 scores estimate story potential from public metadata only. "
         "They do not verify the spoken story, audience retention, or "
         "permission to republish."
     )
@@ -1157,7 +1227,7 @@ def run_youtube_scout(
 
     search_terms = search_terms or CURIOSITY_SEARCHES
 
-    print("\nCLIPPULSE YOUTUBE SCOUT V4 — CURIOSITY-FIRST")
+    print("\nCLIPPULSE YOUTUBE SCOUT V5 — STORY-FIRST")
     print("=" * 65)
 
     discovered = {}
@@ -1173,7 +1243,8 @@ def run_youtube_scout(
 
             results = search_youtube(
                 query,
-                results_per_query
+                results_per_query,
+                order="relevance",
             )
 
             for result in results:
